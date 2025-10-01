@@ -97,29 +97,6 @@ output "sql_server_resource_id" {
   value       = azurerm_mssql_server.main.id
 }
 
-# Container Registry Outputs
-output "acr_login_server" {
-  description = "Login server URL for the Container Registry"
-  value       = azurerm_container_registry.main.login_server
-}
-
-output "acr_name" {
-  description = "Name of the Container Registry"
-  value       = azurerm_container_registry.main.name
-}
-
-output "acr_admin_username" {
-  description = "Admin username for Container Registry"
-  value       = azurerm_container_registry.main.admin_username
-  sensitive   = false
-}
-
-output "acr_admin_password" {
-  description = "Admin password for Container Registry"
-  value       = azurerm_container_registry.main.admin_password
-  sensitive   = true
-}
-
 # Storage Account Outputs
 output "storage_account_name" {
   description = "Name of the Storage Account for Terraform state"

@@ -158,17 +158,6 @@ resource "random_string" "suffix" {
   upper   = false
 }
 
-# Azure Container Registry
-resource "azurerm_container_registry" "main" {
-  name                = "${var.acr_name}${random_string.suffix.result}"
-  resource_group_name = module.resource_group.resource_group.name
-  location            = var.location
-  sku                 = var.acr_sku
-  admin_enabled       = true  # Enable for GitHub Actions access
-  
-  tags = var.tags
-}
-
 # Storage Account for Terraform State (optional - for remote backend)
 resource "azurerm_storage_account" "tfstate" {
   name                     = "tfstate${random_string.suffix.result}"

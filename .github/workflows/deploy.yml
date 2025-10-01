@@ -37,7 +37,6 @@ env:
   TF_VAR_sql_database_name: ${{ fromJson(secrets.TF_VARS).sql_database_name }}
   TF_VAR_sql_admin_username: ${{ fromJson(secrets.TF_VARS).sql_admin_username }}
   TF_VAR_sql_admin_password: ${{ secrets.SQL_ADMIN_PASSWORD }}
-  TF_VAR_acr_name: ${{ fromJson(secrets.TF_VARS).acr_name }}
 
 jobs:
   # Job 1: Deploy Infrastructure
@@ -49,8 +48,6 @@ jobs:
         working-directory: ./terraform
     outputs:
       resource_group: ${{ steps.outputs.outputs.resource_group }}
-      acr_name: ${{ steps.outputs.outputs.acr_name }}
-      acr_login_server: ${{ steps.outputs.outputs.acr_login_server }}
       
     steps:
     - name: 📥 Checkout code
@@ -89,8 +86,6 @@ jobs:
       if: github.event.inputs.action != 'destroy'
       run: |
         echo "resource_group=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
-        echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
-        echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
 
   # Job 2: Build & Deploy Application
   deploy:
@@ -108,15 +103,15 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-    - name: 🔑 Login to Azure Container Registry
+    - name: 🔑 Login to Docker Hub
       run: |
-        az acr login --name ${{ needs.infrastructure.outputs.acr_name }}
+        echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login --username "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
 
     - name: 🏷️ Generate Image Tags
       id: meta
       run: |
-        echo "frontend_tag=${{ needs.infrastructure.outputs.acr_login_server }}/frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
-        echo "backend_tag=${{ needs.infrastructure.outputs.acr_login_server }}/backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "frontend_tag=${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-frontend:latest" >> $GITHUB_OUTPUT
+        echo "backend_tag=${{ secrets.DOCKERHUB_USERNAME }}/ecommerce-backend:latest" >> $GITHUB_OUTPUT
 
     - name: 🔨 Build & Push Frontend Image
       run: |
@@ -129,54 +124,56 @@ jobs:
         docker build --no-cache --pull -f ./ecommerce-app-backend/Dockerfile.new -t ${{ steps.meta.outputs.backend_tag }} ./ecommerce-app-backend
         docker push ${{ steps.meta.outputs.backend_tag }}
 
-    - name: 🚀 Deploy Frontend Container App
+    - name: � Get Container App URLs
+      id: urls
       run: |
-        # Get ACR credentials
-        ACR_USERNAME=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "username" -o tsv)
-        ACR_PASSWORD=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "passwords[0].value" -o tsv)
+        # Get the FQDNs dynamically
+        BACKEND_FQDN=$(az containerapp show --name backend-app --resource-group ${{ needs.infrastructure.outputs.resource_group }} --query "properties.configuration.ingress.fqdn" -o tsv)
+        FRONTEND_FQDN=$(az containerapp show --name frontend-app --resource-group ${{ needs.infrastructure.outputs.resource_group }} --query "properties.configuration.ingress.fqdn" -o tsv)
         
-        az containerapp update \
-          --name frontend-app \
-          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
-          --image ${{ steps.meta.outputs.frontend_tag }} \
-          --registry-server ${{ needs.infrastructure.outputs.acr_login_server }} \
-          --registry-username "$ACR_USERNAME" \
-          --registry-password "$ACR_PASSWORD" \
-          --set-env-vars \
-            NODE_ENV=production \
-            REACT_APP_API_URL=http://backend-app:3001/api
+        echo "backend_url=https://$BACKEND_FQDN" >> $GITHUB_OUTPUT
+        echo "frontend_url=https://$FRONTEND_FQDN" >> $GITHUB_OUTPUT
+        
+        echo "Backend URL: https://$BACKEND_FQDN"
+        echo "Frontend URL: https://$FRONTEND_FQDN"
 
     - name: 🚀 Deploy Backend Container App
       run: |
-        # Get ACR credentials
-        ACR_USERNAME=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "username" -o tsv)
-        ACR_PASSWORD=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "passwords[0].value" -o tsv)
-        
-        # Get SQL Server FQDN for private connection - use variable fallback
-        SQL_SERVER_FQDN="${{ secrets.SQL_SERVER_NAME }}.privatelink.database.windows.net"
-        
+        # Update the container app with Docker Hub image
         az containerapp update \
           --name backend-app \
           --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
           --image ${{ steps.meta.outputs.backend_tag }} \
-          --registry-server ${{ needs.infrastructure.outputs.acr_login_server }} \
-          --registry-username "$ACR_USERNAME" \
-          --registry-password "$ACR_PASSWORD" \
           --set-env-vars \
             PORT=3001 \
             NODE_ENV=production \
-            CORS_ORIGIN=http://frontend-app:3000 \
-            DB_SERVER="$SQL_SERVER_FQDN" \
-            DB_NAME=${{ secrets.DB_NAME }} \
-            DB_USER=${{ secrets.DB_USER }} \
-            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            CORS_ORIGIN="${{ steps.urls.outputs.frontend_url }}" \
+            DB_SERVER="${{ secrets.DB_SERVER }}" \
+            DB_NAME="${{ secrets.DB_NAME }}" \
+            DB_USER="${{ secrets.DB_USER }}" \
+            DB_PASSWORD="${{ secrets.SQL_ADMIN_PASSWORD }}" \
             DB_ENCRYPT=true \
             DB_TRUST_SERVER_CERTIFICATE=false \
             DB_CONNECTION_TIMEOUT=30000 \
-            JWT_SECRET=${{ secrets.JWT_SECRET }} \
+            JWT_SECRET="${{ secrets.JWT_SECRET }}" \
             JWT_EXPIRES_IN=7d \
             RATE_LIMIT_WINDOW_MS=900000 \
             RATE_LIMIT_MAX_REQUESTS=100
+            
+        echo "✅ Backend deployment completed"
+
+    - name: 🚀 Deploy Frontend Container App
+      run: |
+        # Update the container app with Docker Hub image
+        az containerapp update \
+          --name frontend-app \
+          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
+          --image ${{ steps.meta.outputs.frontend_tag }} \
+          --set-env-vars \
+            NODE_ENV=production \
+            REACT_APP_API_URL="${{ steps.urls.outputs.backend_url }}/api"
+            
+        echo "✅ Frontend deployment completed"
 
     - name: ⏳ Wait for Deployment
       run: |
@@ -190,22 +187,25 @@ jobs:
         echo "- **Frontend Image:** \`${{ steps.meta.outputs.frontend_tag }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Backend Image:** \`${{ steps.meta.outputs.backend_tag }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Deployment Time:** $(date)" >> $GITHUB_STEP_SUMMARY
-        
-        # Get frontend URL (try different possible output formats)
-        FRONTEND_URL=$(az containerapp show \
-          --name frontend-app \
-          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
-          --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "not-available")
-        
-        echo "- **Frontend URL:** https://$FRONTEND_URL" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend URL:** ${{ steps.urls.outputs.frontend_url }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Backend URL:** ${{ steps.urls.outputs.backend_url }}" >> $GITHUB_STEP_SUMMARY
         
         # Test health endpoints
         echo "### 🔍 Health Checks:" >> $GITHUB_STEP_SUMMARY
         
-        if curl -f "https://$FRONTEND_URL/health" > /dev/null 2>&1; then
+        # Extract just the hostname from the frontend URL for testing
+        FRONTEND_FQDN=$(echo "${{ steps.urls.outputs.frontend_url }}" | sed 's|https://||')
+        
+        if curl -f "${{ steps.urls.outputs.frontend_url }}" > /dev/null 2>&1; then
           echo "- **Frontend Health:** ✅ Healthy" >> $GITHUB_STEP_SUMMARY
         else
           echo "- **Frontend Health:** ⚠️ Not responding (may still be starting)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if curl -f "${{ steps.urls.outputs.backend_url }}/health" > /dev/null 2>&1; then
+          echo "- **Backend Health:** ✅ Healthy" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Backend Health:** ⚠️ Not responding (may still be starting)" >> $GITHUB_STEP_SUMMARY
         fi
         
         echo "### 🎯 Next Steps:" >> $GITHUB_STEP_SUMMARY

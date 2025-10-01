@@ -86,15 +86,3 @@ variable "sql_admin_password" {
   type        = string
   sensitive   = true
 }
-
-# Container Registry Variables
-variable "acr_name" {
-  description = "Name of the Azure Container Registry"
-  type        = string
-}
-
-variable "acr_sku" {
-  description = "SKU for Azure Container Registry"
-  type        = string
-  default     = "Basic"
-}

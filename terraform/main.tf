@@ -89,7 +89,7 @@ resource "azurerm_container_app" "main" {
 
 # Azure SQL Server (direct azurerm resource)
 resource "azurerm_mssql_server" "main" {
-  name                         = var.sql_server_name
+  name                         = "${var.sql_server_name}-${random_string.suffix.result}"
   resource_group_name          = module.resource_group.resource_group.name
   location                     = var.location
   version                      = "12.0"
@@ -114,13 +114,13 @@ resource "azurerm_mssql_database" "main" {
 
 # Private Endpoint for SQL Server
 resource "azurerm_private_endpoint" "sql" {
-  name                = "${var.sql_server_name}-private-endpoint"
+  name                = "${var.sql_server_name}-${random_string.suffix.result}-private-endpoint"
   location            = var.location
   resource_group_name = module.resource_group.resource_group.name
   subnet_id           = module.subnets["db_subnet"].subnet.id
 
   private_service_connection {
-    name                           = "${var.sql_server_name}-privateserviceconnection"
+    name                           = "${var.sql_server_name}-${random_string.suffix.result}-privateserviceconnection"
     private_connection_resource_id = azurerm_mssql_server.main.id
     subresource_names              = ["sqlServer"]
     is_manual_connection           = false

@@ -84,7 +84,7 @@ output "sql_server_fqdn" {
 
 output "sql_server_private_fqdn" {
   description = "Private FQDN of the SQL Server (via private endpoint)"
-  value       = "${var.sql_server_name}.privatelink.database.windows.net"
+  value       = "${var.sql_server_name}-${random_string.suffix.result}.privatelink.database.windows.net"
 }
 
 output "sql_database_name" {

@@ -9,7 +9,6 @@ terraform {
 
 provider "azurerm" {
   features {}
-  subscription_id = var.subscription_id
-  # If var.subscription_id is null, it will automatically use ARM_SUBSCRIPTION_ID environment variable
+  # subscription_id will use ARM_SUBSCRIPTION_ID environment variable or TF_VAR_subscription_id
 }
 

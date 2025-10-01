@@ -22,8 +22,22 @@ env:
   ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  # Terraform Variables from JSON secret
   TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  TF_VAR_resource_group_name: ${{ fromJson(secrets.TF_VARS).resource_group_name }}
+  TF_VAR_location: ${{ fromJson(secrets.TF_VARS).location }}
+  TF_VAR_vnet_name: ${{ fromJson(secrets.TF_VARS).vnet_name }}
+  TF_VAR_address_space: ${{ toJson(fromJson(secrets.TF_VARS).address_space) }}
+  TF_VAR_subnet: ${{ toJson(fromJson(secrets.TF_VARS).subnet) }}
+  TF_VAR_log_analytics_workspace_name: ${{ fromJson(secrets.TF_VARS).log_analytics_workspace_name }}
+  TF_VAR_container_app_environment_name: ${{ fromJson(secrets.TF_VARS).container_app_environment_name }}
+  TF_VAR_container_apps: ${{ toJson(fromJson(secrets.TF_VARS).container_apps) }}
+  TF_VAR_tags: ${{ toJson(fromJson(secrets.TF_VARS).tags) }}
+  TF_VAR_sql_server_name: ${{ fromJson(secrets.TF_VARS).sql_server_name }}
+  TF_VAR_sql_database_name: ${{ fromJson(secrets.TF_VARS).sql_database_name }}
+  TF_VAR_sql_admin_username: ${{ fromJson(secrets.TF_VARS).sql_admin_username }}
   TF_VAR_sql_admin_password: ${{ secrets.SQL_ADMIN_PASSWORD }}
+  TF_VAR_acr_name: ${{ fromJson(secrets.TF_VARS).acr_name }}
 
 jobs:
   # Job 1: Deploy Infrastructure
@@ -60,7 +74,7 @@ jobs:
       run: terraform validate
 
     - name: 📋 Terraform Plan
-      run: terraform plan -var-file="terraform.tfvars" -out=tfplan
+      run: terraform plan -out=tfplan
 
     - name: 🚀 Terraform Apply
       if: github.event.inputs.action != 'destroy'
@@ -68,7 +82,7 @@ jobs:
 
     - name: 💥 Terraform Destroy
       if: github.event.inputs.action == 'destroy'
-      run: terraform destroy -var-file="terraform.tfvars" -auto-approve
+      run: terraform destroy -auto-approve
 
     - name: 📤 Get Terraform Outputs
       id: outputs

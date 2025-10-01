@@ -74,12 +74,12 @@ output "log_analytics_workspace_id" {
 # Database Outputs
 output "sql_server_name" {
   description = "Name of the SQL Server"
-  value       = module.sql_server.name
+  value       = try(module.sql_server.name, module.sql_server.resource.name, var.sql_server_name)
 }
 
 output "sql_server_fqdn" {
   description = "Fully qualified domain name of the SQL Server"
-  value       = module.sql_server.fully_qualified_domain_name
+  value       = try(module.sql_server.fully_qualified_domain_name, module.sql_server.resource.fully_qualified_domain_name, "${var.sql_server_name}.database.windows.net")
 }
 
 output "sql_server_private_fqdn" {
@@ -94,7 +94,7 @@ output "sql_database_name" {
 
 output "sql_server_resource_id" {
   description = "Resource ID of the SQL Server"
-  value       = module.sql_server.resource_id
+  value       = try(module.sql_server.resource_id, module.sql_server.resource.id, "not-available")
 }
 
 # Container Registry Outputs
@@ -111,6 +111,7 @@ output "acr_name" {
 output "acr_admin_username" {
   description = "Admin username for Container Registry"
   value       = azurerm_container_registry.main.admin_username
+  sensitive   = false
 }
 
 output "acr_admin_password" {

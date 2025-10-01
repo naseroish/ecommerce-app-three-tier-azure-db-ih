@@ -44,86 +44,91 @@ resource "azurerm_container_app_environment" "main" {
   tags                           = var.tags
 }
 
-# Container Apps using AVM module with for_each
-module "container_apps" {
-  source  = "Azure/avm-res-app-containerapp/azurerm"
-  version = "~> 0.7.0"
-  
+# Container Apps (direct azurerm resources)
+resource "azurerm_container_app" "main" {
   for_each = var.container_apps
-
-  name                                  = "${each.key}-app"
-  resource_group_name                   = module.resource_group.resource_group.name
-  container_app_environment_resource_id = azurerm_container_app_environment.main.id
-  revision_mode                         = "Single"
-  tags                                  = var.tags
-
-  template = {
+  
+  name                         = "${each.key}-app"
+  container_app_environment_id = azurerm_container_app_environment.main.id
+  resource_group_name          = module.resource_group.resource_group.name
+  revision_mode                = "Single"
+  
+  template {
     min_replicas = each.value.min_replicas
     max_replicas = each.value.max_replicas
     
-    containers = [
-      {
-        name   = each.key
-        image  = each.value.image
-        cpu    = each.value.cpu
-        memory = each.value.memory
-        env = [
-          for env_key, env_value in each.value.env_vars : {
-            name  = env_key
-            value = env_value
-          }
-        ]
+    container {
+      name   = each.key
+      image  = each.value.image
+      cpu    = each.value.cpu
+      memory = each.value.memory
+      
+      dynamic "env" {
+        for_each = each.value.env_vars
+        content {
+          name  = env.key
+          value = env.value
+        }
       }
-    ]
+    }
   }
-
-  ingress = {
+  
+  ingress {
     allow_insecure_connections = false
     external_enabled          = each.value.external_enabled
     target_port              = each.value.target_port
-    traffic_weight = [
-      {
-        percentage      = 100
-        latest_revision = true
-      }
-    ]
+    
+    traffic_weight {
+      percentage      = 100
+      latest_revision = true
+    }
   }
+  
+  tags = var.tags
 }
 
-# Azure SQL Server with Database using AVM module
-module "sql_server" {
-  source  = "Azure/avm-res-sql-server/azurerm"
-  version = "~> 0.1.0"  # Use compatible version
+# Azure SQL Server (direct azurerm resource)
+resource "azurerm_mssql_server" "main" {
+  name                         = var.sql_server_name
+  resource_group_name          = module.resource_group.resource_group.name
+  location                     = var.location
+  version                      = "12.0"
+  administrator_login          = var.sql_admin_username
+  administrator_login_password = var.sql_admin_password
+  public_network_access_enabled = false
+  
+  tags = var.tags
+}
 
-  name                = var.sql_server_name
-  resource_group_name = module.resource_group.resource_group.name
+# Azure SQL Database
+resource "azurerm_mssql_database" "main" {
+  name         = var.sql_database_name
+  server_id    = azurerm_mssql_server.main.id
+  collation    = "SQL_Latin1_General_CP1_CI_AS"
+  license_type = "LicenseIncluded"
+  max_size_gb  = 20
+  sku_name     = "Basic"
+  
+  tags = var.tags
+}
+
+# Private Endpoint for SQL Server
+resource "azurerm_private_endpoint" "sql" {
+  name                = "${var.sql_server_name}-private-endpoint"
   location            = var.location
-  
-  # SQL Server Configuration
-  server_version                = "12.0"
-  administrator_login           = var.sql_admin_username
-  administrator_login_password  = var.sql_admin_password
-  public_network_access_enabled = false  # Disable public access for security
-  
-  # Private Endpoint Configuration
-  private_endpoints = {
-    primary = {
-      name                          = "${var.sql_server_name}-private-endpoint"
-      subnet_resource_id            = module.subnets["db_subnet"].subnet.id
-      subresource_name              = "sqlServer"  # Fixed: singular form
-      private_dns_zone_resource_ids = [azurerm_private_dns_zone.sql.id]
-    }
+  resource_group_name = module.resource_group.resource_group.name
+  subnet_id           = module.subnets["db_subnet"].subnet.id
+
+  private_service_connection {
+    name                           = "${var.sql_server_name}-privateserviceconnection"
+    private_connection_resource_id = azurerm_mssql_server.main.id
+    subresource_names              = ["sqlServer"]
+    is_manual_connection           = false
   }
 
-  # Database Configuration using submodule
-  databases = {
-    ecommerce = {
-      name         = var.sql_database_name
-      collation    = "SQL_Latin1_General_CP1_CI_AS"
-      license_type = "LicenseIncluded"
-      max_size_gb  = 20
-      sku_name     = "Basic"
-    }
+  private_dns_zone_group {
+    name                 = "sql-dns-zone-group"
+    private_dns_zone_ids = [azurerm_private_dns_zone.sql.id]
   }
 
   tags = var.tags

@@ -33,20 +33,20 @@ output "container_app_environment_default_domain" {
 
 output "frontend_app_url" {
   description = "URL of the frontend application"
-  value       = try(module.container_apps["frontend"].fqdn, module.container_apps["frontend"].application_url, "Not available")
+  value       = try(azurerm_container_app.main["frontend"].latest_revision_fqdn, azurerm_container_app.main["frontend"].ingress[0].fqdn, "Not available")
 }
 
 output "backend_app_internal_url" {
   description = "Internal URL of the backend application"  
-  value       = try(module.container_apps["backend"].fqdn, module.container_apps["backend"].application_url, "Not available")
+  value       = try(azurerm_container_app.main["backend"].latest_revision_fqdn, azurerm_container_app.main["backend"].ingress[0].fqdn, "Not available")
 }
 
 output "container_apps_info" {
   description = "Information about all container apps"
   value = {
     for app_name, app_config in var.container_apps : app_name => {
-      name         = module.container_apps[app_name].name
-      resource_id  = module.container_apps[app_name].resource_id
+      name         = azurerm_container_app.main[app_name].name
+      resource_id  = azurerm_container_app.main[app_name].id
     }
   }
 }
@@ -74,12 +74,12 @@ output "log_analytics_workspace_id" {
 # Database Outputs
 output "sql_server_name" {
   description = "Name of the SQL Server"
-  value       = try(module.sql_server.name, module.sql_server.resource.name, var.sql_server_name)
+  value       = azurerm_mssql_server.main.name
 }
 
 output "sql_server_fqdn" {
   description = "Fully qualified domain name of the SQL Server"
-  value       = try(module.sql_server.fully_qualified_domain_name, module.sql_server.resource.fully_qualified_domain_name, "${var.sql_server_name}.database.windows.net")
+  value       = azurerm_mssql_server.main.fully_qualified_domain_name
 }
 
 output "sql_server_private_fqdn" {
@@ -89,12 +89,12 @@ output "sql_server_private_fqdn" {
 
 output "sql_database_name" {
   description = "Name of the SQL Database"
-  value       = var.sql_database_name
+  value       = azurerm_mssql_database.main.name
 }
 
 output "sql_server_resource_id" {
   description = "Resource ID of the SQL Server"
-  value       = try(module.sql_server.resource_id, module.sql_server.resource.id, "not-available")
+  value       = azurerm_mssql_server.main.id
 }
 
 # Container Registry Outputs

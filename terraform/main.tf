@@ -106,7 +106,7 @@ resource "azurerm_mssql_database" "main" {
   server_id    = azurerm_mssql_server.main.id
   collation    = "SQL_Latin1_General_CP1_CI_AS"
   license_type = "LicenseIncluded"
-  max_size_gb  = 20
+  max_size_gb  = 2  # Basic tier supports up to 2GB
   sku_name     = "Basic"
   
   tags = var.tags

@@ -35,7 +35,34 @@ This is a three-tier application consisting of:
 - 🔄 Real-time cart updates
 - 📱 Progressive Web App ready
 
-## 🚀 Quick Start
+## 🚀 Azure Infrastructure Deployment
+
+This project includes complete Infrastructure as Code (IaC) using Terraform and automated CI/CD with GitHub Actions.
+
+### Infrastructure Components
+- **Azure Container Apps** - Serverless containerized applications
+- **Azure SQL Database** - Managed database with private endpoint
+- **Azure Container Registry** - Docker image storage
+- **Virtual Network** - Network isolation and security
+- **Log Analytics** - Centralized logging and monitoring
+
+### Automated Deployment
+
+1. **Setup GitHub Secrets** (see `GITHUB_SECRETS.md`):
+   - Azure Service Principal credentials
+   - Database passwords
+   - JWT secrets
+
+2. **Deploy via GitHub Actions**:
+   - Go to **Actions** tab → **"🚀 Deploy Three-Tier Application"**
+   - Click **"Run workflow"** → Choose **"deploy"**
+   - Wait for automatic infrastructure and application deployment
+
+3. **Access Your Application**:
+   - Frontend URL will be provided in the workflow summary
+   - Test the complete three-tier application on Azure
+
+### Manual Infrastructure Setup
 
 ### Prerequisites
 

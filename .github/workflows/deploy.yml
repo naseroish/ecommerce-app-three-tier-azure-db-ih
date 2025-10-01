@@ -131,16 +131,27 @@ jobs:
 
     - name: 🚀 Deploy Frontend Container App
       run: |
+        # Get ACR credentials
+        ACR_USERNAME=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "username" -o tsv)
+        ACR_PASSWORD=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "passwords[0].value" -o tsv)
+        
         az containerapp update \
           --name frontend-app \
           --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
           --image ${{ steps.meta.outputs.frontend_tag }} \
+          --registry-server ${{ needs.infrastructure.outputs.acr_login_server }} \
+          --registry-username "$ACR_USERNAME" \
+          --registry-password "$ACR_PASSWORD" \
           --set-env-vars \
             NODE_ENV=production \
             REACT_APP_API_URL=http://backend-app:3001/api
 
     - name: 🚀 Deploy Backend Container App
       run: |
+        # Get ACR credentials
+        ACR_USERNAME=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "username" -o tsv)
+        ACR_PASSWORD=$(az acr credential show --name ${{ needs.infrastructure.outputs.acr_name }} --query "passwords[0].value" -o tsv)
+        
         # Get SQL Server FQDN for private connection - use variable fallback
         SQL_SERVER_FQDN="${{ secrets.SQL_SERVER_NAME }}.privatelink.database.windows.net"
         
@@ -148,6 +159,9 @@ jobs:
           --name backend-app \
           --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
           --image ${{ steps.meta.outputs.backend_tag }} \
+          --registry-server ${{ needs.infrastructure.outputs.acr_login_server }} \
+          --registry-username "$ACR_USERNAME" \
+          --registry-password "$ACR_PASSWORD" \
           --set-env-vars \
             PORT=3001 \
             NODE_ENV=production \

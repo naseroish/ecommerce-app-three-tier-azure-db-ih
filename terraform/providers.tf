@@ -9,6 +9,6 @@ terraform {
 
 provider "azurerm" {
   features {}
-  # subscription_id will use ARM_SUBSCRIPTION_ID environment variable or TF_VAR_subscription_id
+  subscription_id = "80646857-9142-494b-90c5-32fea6acbc41"
 }
 

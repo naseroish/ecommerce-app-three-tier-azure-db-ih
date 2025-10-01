@@ -125,7 +125,7 @@ jobs:
 
     - name: 🔨 Build & Push Backend Image
       run: |
-        docker build -t ${{ steps.meta.outputs.backend_tag }} ./ecommerce-app-backend
+        docker build --no-cache -t ${{ steps.meta.outputs.backend_tag }} ./ecommerce-app-backend
         docker push ${{ steps.meta.outputs.backend_tag }}
 
     - name: 🚀 Deploy Frontend Container App

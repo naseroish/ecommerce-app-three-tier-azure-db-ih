@@ -22,6 +22,7 @@ env:
   ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_subscription_id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
   TF_VAR_sql_admin_password: ${{ secrets.SQL_ADMIN_PASSWORD }}
 
 jobs:
@@ -59,7 +60,7 @@ jobs:
       run: terraform validate
 
     - name: 📋 Terraform Plan
-      run: terraform plan -out=tfplan
+      run: terraform plan -var-file="terraform.tfvars" -out=tfplan
 
     - name: 🚀 Terraform Apply
       if: github.event.inputs.action != 'destroy'
@@ -67,7 +68,7 @@ jobs:
 
     - name: 💥 Terraform Destroy
       if: github.event.inputs.action == 'destroy'
-      run: terraform destroy -auto-approve
+      run: terraform destroy -var-file="terraform.tfvars" -auto-approve
 
     - name: 📤 Get Terraform Outputs
       id: outputs

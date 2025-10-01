@@ -1,0 +1,187 @@
+name: 🚀 Deploy Three-Tier Application to Azure Container Apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform'
+        required: true
+        default: 'deploy'
+        type: choice
+        options:
+        - deploy
+        - destroy
+
+permissions:
+  contents: read
+  actions: read
+  id-token: write
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  TF_VAR_sql_admin_password: ${{ secrets.SQL_ADMIN_PASSWORD }}
+
+jobs:
+  # Job 1: Deploy Infrastructure
+  infrastructure:
+    name: 🏗️ Deploy Infrastructure
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./terraform
+    outputs:
+      resource_group: ${{ steps.outputs.outputs.resource_group }}
+      acr_name: ${{ steps.outputs.outputs.acr_name }}
+      acr_login_server: ${{ steps.outputs.outputs.acr_login_server }}
+      
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔧 Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: 1.6.0
+        terraform_wrapper: false
+
+    - name: 🔐 Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🏗️ Terraform Init
+      run: terraform init
+
+    - name: 🔍 Terraform Validate
+      run: terraform validate
+
+    - name: 📋 Terraform Plan
+      run: terraform plan -out=tfplan
+
+    - name: 🚀 Terraform Apply
+      if: github.event.inputs.action != 'destroy'
+      run: terraform apply -auto-approve tfplan
+
+    - name: 💥 Terraform Destroy
+      if: github.event.inputs.action == 'destroy'
+      run: terraform destroy -auto-approve
+
+    - name: 📤 Get Terraform Outputs
+      id: outputs
+      if: github.event.inputs.action != 'destroy'
+      run: |
+        echo "resource_group=$(terraform output -raw resource_group_name)" >> $GITHUB_OUTPUT
+        echo "acr_name=$(terraform output -raw acr_name)" >> $GITHUB_OUTPUT
+        echo "acr_login_server=$(terraform output -raw acr_login_server)" >> $GITHUB_OUTPUT
+
+  # Job 2: Build & Deploy Application
+  deploy:
+    name: 🚀 Deploy Application
+    needs: infrastructure
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action != 'destroy'
+
+    steps:
+    - name: 📥 Checkout code
+      uses: actions/checkout@v4
+
+    - name: 🔐 Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: 🔑 Login to Azure Container Registry
+      run: |
+        az acr login --name ${{ needs.infrastructure.outputs.acr_name }}
+
+    - name: 🏷️ Generate Image Tags
+      id: meta
+      run: |
+        echo "frontend_tag=${{ needs.infrastructure.outputs.acr_login_server }}/frontend:${{ github.sha }}" >> $GITHUB_OUTPUT
+        echo "backend_tag=${{ needs.infrastructure.outputs.acr_login_server }}/backend:${{ github.sha }}" >> $GITHUB_OUTPUT
+
+    - name: 🔨 Build & Push Frontend Image
+      run: |
+        docker build -t ${{ steps.meta.outputs.frontend_tag }} ./ecommerce-app-frontend
+        docker push ${{ steps.meta.outputs.frontend_tag }}
+
+    - name: 🔨 Build & Push Backend Image
+      run: |
+        docker build -t ${{ steps.meta.outputs.backend_tag }} ./ecommerce-app-backend
+        docker push ${{ steps.meta.outputs.backend_tag }}
+
+    - name: 🚀 Deploy Frontend Container App
+      run: |
+        az containerapp update \
+          --name frontend-app \
+          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
+          --image ${{ steps.meta.outputs.frontend_tag }} \
+          --set-env-vars \
+            NODE_ENV=production \
+            REACT_APP_API_URL=http://backend-app:3001/api
+
+    - name: 🚀 Deploy Backend Container App
+      run: |
+        # Get SQL Server FQDN for private connection
+        SQL_SERVER_FQDN=$(az sql server show \
+          --name ${{ secrets.SQL_SERVER_NAME }} \
+          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
+          --query "fullyQualifiedDomainName" -o tsv)
+        
+        az containerapp update \
+          --name backend-app \
+          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
+          --image ${{ steps.meta.outputs.backend_tag }} \
+          --set-env-vars \
+            PORT=3001 \
+            NODE_ENV=production \
+            CORS_ORIGIN=http://frontend-app:3000 \
+            DB_SERVER=$SQL_SERVER_FQDN \
+            DB_NAME=${{ secrets.DB_NAME }} \
+            DB_USER=${{ secrets.DB_USER }} \
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }} \
+            DB_ENCRYPT=true \
+            DB_TRUST_SERVER_CERTIFICATE=false \
+            DB_CONNECTION_TIMEOUT=30000 \
+            JWT_SECRET=${{ secrets.JWT_SECRET }} \
+            JWT_EXPIRES_IN=7d \
+            RATE_LIMIT_WINDOW_MS=900000 \
+            RATE_LIMIT_MAX_REQUESTS=100
+
+    - name: ⏳ Wait for Deployment
+      run: |
+        echo "Waiting for container apps to update..."
+        sleep 60
+
+    - name: 🔍 Test Application
+      run: |
+        echo "## 🎉 Application Deployed Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "### 📋 Deployment Details:" >> $GITHUB_STEP_SUMMARY
+        echo "- **Frontend Image:** \`${{ steps.meta.outputs.frontend_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Backend Image:** \`${{ steps.meta.outputs.backend_tag }}\`" >> $GITHUB_STEP_SUMMARY
+        echo "- **Deployment Time:** $(date)" >> $GITHUB_STEP_SUMMARY
+        
+        # Get frontend URL
+        FRONTEND_URL=$(az containerapp show \
+          --name frontend-app \
+          --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
+          --query "properties.configuration.ingress.fqdn" -o tsv)
+        
+        echo "- **Frontend URL:** https://$FRONTEND_URL" >> $GITHUB_STEP_SUMMARY
+        
+        # Test health endpoints
+        echo "### 🔍 Health Checks:" >> $GITHUB_STEP_SUMMARY
+        
+        if curl -f "https://$FRONTEND_URL/health" > /dev/null 2>&1; then
+          echo "- **Frontend Health:** ✅ Healthy" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "- **Frontend Health:** ⚠️ Not responding (may still be starting)" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "### 🎯 Next Steps:" >> $GITHUB_STEP_SUMMARY
+        echo "1. Visit the frontend URL to test the application" >> $GITHUB_STEP_SUMMARY
+        echo "2. Try the signup/login functionality" >> $GITHUB_STEP_SUMMARY
+        echo "3. Check the products page to verify backend connectivity" >> $GITHUB_STEP_SUMMARY

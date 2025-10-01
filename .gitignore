@@ -116,3 +116,11 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+
+# Terraform files
+*.tfvars
+*.tfvars.json
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl

@@ -47,7 +47,7 @@ resource "azurerm_container_app_environment" "main" {
 # Container Apps using AVM module with for_each
 module "container_apps" {
   source  = "Azure/avm-res-app-containerapp/azurerm"
-  version = "~> 0.7.4"
+  version = "~> 0.7.0"
   
   for_each = var.container_apps
 
@@ -93,7 +93,7 @@ module "container_apps" {
 # Azure SQL Server with Database using AVM module
 module "sql_server" {
   source  = "Azure/avm-res-sql-server/azurerm"
-  version = "~> 0.1.0"
+  version = "~> 0.1.0"  # Use compatible version
 
   name                = var.sql_server_name
   resource_group_name = module.resource_group.resource_group.name

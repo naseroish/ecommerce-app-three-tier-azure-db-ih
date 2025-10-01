@@ -164,11 +164,11 @@ jobs:
         echo "- **Backend Image:** \`${{ steps.meta.outputs.backend_tag }}\`" >> $GITHUB_STEP_SUMMARY
         echo "- **Deployment Time:** $(date)" >> $GITHUB_STEP_SUMMARY
         
-        # Get frontend URL
+        # Get frontend URL (try different possible output formats)
         FRONTEND_URL=$(az containerapp show \
           --name frontend-app \
           --resource-group ${{ needs.infrastructure.outputs.resource_group }} \
-          --query "properties.configuration.ingress.fqdn" -o tsv)
+          --query "properties.configuration.ingress.fqdn" -o tsv 2>/dev/null || echo "not-available")
         
         echo "- **Frontend URL:** https://$FRONTEND_URL" >> $GITHUB_STEP_SUMMARY
         

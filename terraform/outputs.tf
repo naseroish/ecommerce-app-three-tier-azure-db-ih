@@ -33,21 +33,20 @@ output "container_app_environment_default_domain" {
 
 output "frontend_app_url" {
   description = "URL of the frontend application"
-  value       = "https://${module.container_apps["frontend"].fqdn}"
+  value       = try(module.container_apps["frontend"].fqdn, module.container_apps["frontend"].application_url, "Not available")
 }
 
 output "backend_app_internal_url" {
-  description = "Internal URL of the backend application"
-  value       = "https://${module.container_apps["backend"].fqdn}"
+  description = "Internal URL of the backend application"  
+  value       = try(module.container_apps["backend"].fqdn, module.container_apps["backend"].application_url, "Not available")
 }
 
 output "container_apps_info" {
   description = "Information about all container apps"
   value = {
     for app_name, app_config in var.container_apps : app_name => {
-      name = module.container_apps[app_name].name
-      fqdn = module.container_apps[app_name].fqdn
-      url  = "https://${module.container_apps[app_name].fqdn}"
+      name         = module.container_apps[app_name].name
+      resource_id  = module.container_apps[app_name].resource_id
     }
   }
 }
@@ -57,7 +56,6 @@ output "app_communication_info" {
   description = "Internal communication information between apps"
   value = {
     frontend = {
-      external_url      = "https://${module.container_apps["frontend"].fqdn}"
       internal_hostname = "frontend-app:3000"
       api_endpoint      = "http://backend-app:3001/api"
     }

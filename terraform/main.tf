@@ -110,7 +110,7 @@ module "sql_server" {
     primary = {
       name                          = "${var.sql_server_name}-private-endpoint"
       subnet_resource_id            = module.subnets["db_subnet"].subnet.id
-      subresource_names             = ["sqlServer"]
+      subresource_name              = "sqlServer"  # Fixed: singular form
       private_dns_zone_resource_ids = [azurerm_private_dns_zone.sql.id]
     }
   }
